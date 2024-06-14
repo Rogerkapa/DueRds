@@ -2,25 +2,17 @@
   RDS ENCODER ARDUINO DUE modded from Jonas work
 */
 
-#ifndef RDS_INCLUDED
-#define RDS_INCLUDED
+#ifndef GENR_INCLUDED
+#define GENR_INCLUDED
 
 #include <Arduino.h>
 #include "pins_arduino.h"  
+
 
 /******* SOFT INTERRUPT ---> *******/
 #define SOFT_IRQn TC1_IRQn
 #define SOFT_Handler TC1_Handler
 /******* <--- SOFT INTERRUPT *******/
-
-/***TIME CT***/
-#define RDS_GROUP_LENGTH 4
-#define RDS_BITS_PER_GROUP (RDS_GROUP_LENGTH * (RDS_BLOCK_SIZE+RDS_POLY_DEG))
-#define RDS_POLY 0x1B9
-#define RDS_POLY_DEG 10
-#define RDS_MSB_BIT 0x8000
-#define RDS_BLOCK_SIZE 16
-/***TIME CT***/
 
 
 class RDSClass
@@ -162,7 +154,7 @@ class RDSClass
 
     void DACC_ISR_ISR(void);
 
-    Group_type GROUPS[10] = {Group_0A, Group_2A, Group_10A, Group_2A, Group_10A};
+    Group_type GROUPS[10] = {Group_0A, Group_2A, Group_10A, Group_2A, Group_10A, Group_4A};   //Groups to send, added Group 4A with CT Time
 
     void SendingGroups(void);
 
@@ -189,11 +181,13 @@ class RDSClass
     //[2] Not Artificial Head - Artificial Head, [3] mono - stereo
 
     word ALT_FREQ = (0xE0 << 8) | 0xE0;
-    char PS_NAME[9] = ("RDSTEST1");  
+    char PS_NAME[9] = ("RDS-DUE2");  
     char DINAMIC_PS[65] = ("ARDUINO DUE RDS ENCODER INTERNAL DAC");
+    
+    
     bool DINAMIC_PS_ON_OFF = false;
     char RT_MESSAGE[65] = ("ARDUINO DUE RDS ENCODER INTERNAL DAC"); 
-   
+    
     bool RT_A_B_FLAG = false;                                            
     bool PTYN_FLAG = true;
     char* PS_Pointer = PS_NAME;
@@ -205,7 +199,7 @@ class RDSClass
     void scroll_ps(bool);
     word crc(word);
     void setBlock(word, offset_type);
-    word RDS_Data_Block_word[2][4];                                               //Ezzel a bittel váltunk az aktuálisan olvasott és az írandó tömbelem közt.
+    word RDS_Data_Block_word[2][4];         
     volatile bool new_group_end = false;
     bool MEM_select = false;
     int di_ps_i = 0, rt_i = 0, ptyn_i = 0;

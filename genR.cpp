@@ -1,11 +1,16 @@
 /*
   RDS ENCODER ARDUINO DUE modded from Jonas work
+  Thanks to Vincent to help coding CT group
+  #define RDS_COUNTRY_PT    0x08E4  /* Portugal */
 */
 
 #include "genR.h"
+#include "RTClib.h"
+
+extern RTC_PCF8563 rtc;
 
 void RDSClass::begin(uint32_t period) {
-  SineTable_UP(2, 155);  //255    LEVEL OUTPUT
+  SineTable_UP(2, 254);  //255Max  155 RDS LEVEL OUTPUT
 
   // SOFT INTERRUPT
   NVIC_ClearPendingIRQ(SOFT_IRQn);
@@ -115,7 +120,6 @@ void RDSClass::SendingGroups(void) {
   static int group_i = 0;
   static bool d_ps = 0;
 
-
   if (!new_group_end) {
     if (1) {
 
@@ -127,7 +131,7 @@ void RDSClass::SendingGroups(void) {
       }
       new_group_end = true;
 
-      if (group_i > 4) group_i = 0;
+      if (group_i > 5) group_i = 0;   //4 changed to 5 to send Group 4A with CT=hour, minutes
     }
     else group_i = 0;
   }
@@ -136,12 +140,13 @@ void RDSClass::SendingGroups(void) {
   =======================================================================================================================================
   ---SEND GROUP---*/
 int RDSClass::sendGroup(Group_type group) {
-
+  
   setBlock(PI_CODE, Block_A);
 
   switch (group)
   {
     case Group_0A:
+
       setBlock((((word)group) << 11) | (((word)TP) << 10) | (((word)PTY) << 5) | (((word)TA) << 4) | (((word)M_S) << 3) | (((word)DI[di_ps_i / 2]) << 2) | (word)(di_ps_i / 2), Block_B);
       setBlock(ALT_FREQ, Block_C);
       setBlock((((word) * (PS_Pointer + di_ps_i++)) << 8) | *(PS_Pointer + di_ps_i++), Block_D);
@@ -152,6 +157,7 @@ int RDSClass::sendGroup(Group_type group) {
       break;
 
     case Group_0B:
+
       setBlock((((word)group) << 11) | (((word)TP) << 10) | (PTY << 5) | (((word)TA) << 4) | (((word)M_S) << 3) | (((word)DI[di_ps_i / 2]) << 2) | (di_ps_i / 2), Block_B);
       setBlock(PI_CODE, Block_C_prime);
       setBlock((((word) * (PS_Pointer + di_ps_i++)) << 8) | *(PS_Pointer + di_ps_i++), Block_D);
@@ -166,6 +172,7 @@ int RDSClass::sendGroup(Group_type group) {
       break;
 
     case Group_1B:
+
       setBlock(PI_CODE, Block_C_prime);
       break;
 
@@ -177,6 +184,7 @@ int RDSClass::sendGroup(Group_type group) {
       break;
 
     case Group_2B:
+
       if (rt_i > 31) rt_i = 0;
       setBlock((((word)group) << 11) | (((word)TP) << 10) | ((word)PTY << 5) | (((word)RT_A_B_FLAG) << 4) | (rt_i / 4), Block_B);
       setBlock(PI_CODE, Block_C_prime);
@@ -185,21 +193,64 @@ int RDSClass::sendGroup(Group_type group) {
       break;
 
     case Group_3A:
+
       setBlock((((word)group) << 11) | (((word)TP) << 10) | ((word)PTY << 5) | ((word)Group_11A), Block_B);
       setBlock((rtPlus_rfu << 13) | (((word)rtPlus_CB_flag) << 12) | (rtPlus_SCB_flag << 8), Block_C);
       setBlock(0100101111010111, Block_D);
       break;
 
     case Group_3B:
+
       setBlock(PI_CODE, Block_C_prime);
       break;
 
     case Group_4A:
+    {
+// Vincent code                         //
+// --------------------------------------
+//int month   = 5;
+//int year    = 2023;
+//int day     = 21;
+//int hours   = 16;
+//int minute = 21;
 
+//int offs = month < 1 ? 1 : 0;
+
+//int MonthYearDay = 14956 + day + (int)((year - 1) * 365.25) + (int)((month + 2 + offs*12) * 30.6001);
+
+//word blockB = 0x4400 | (MonthYearDay>>15);
+//word blockC = (MonthYearDay<<1) | (hours>>4);
+//word blockD = (hours & 0x0F)<<12 | minute<<6;
+
+//setBlock(blockB, Block_B);
+//setBlock(blockC, Block_C);
+//setBlock(blockD, Block_D);
+// --------------------------------------
+  
+    DateTime now = rtc.now();
+    
+    int day = now.day();
+    int month = now.month();
+    int year = now.year();
+    int hour = now.hour();
+    int minute = now.minute();
+
+//    Serial.print(now.hour(), DEC);    //Debug if i2c RTC is OK
+//    Serial.print(':');
+//    Serial.println(now.minute(), DEC);
+    
+    int l = month <= 1 ? 1 : 0;
+    int mjd = 14956 + day +(int)((year - l) * 365.25) + (int)((month + 2 + l*12) * 30.6001);
+
+    setBlock((((word)group) << 11)| 0x4400 | (mjd>>15), Block_B);
+    setBlock((word) (mjd<<1) | (hour>>4), Block_C);
+    setBlock((word) ((hour & 0xF)<<12) | minute<<6, Block_D);
+    }
       break;
-
+    
     case Group_4B:
       setBlock(PI_CODE, Block_C_prime);
+      
       break;
 
     case Group_5A:
@@ -207,6 +258,7 @@ int RDSClass::sendGroup(Group_type group) {
       break;
 
     case Group_5B:
+
       setBlock(PI_CODE, Block_C_prime);
       break;
 
@@ -215,6 +267,7 @@ int RDSClass::sendGroup(Group_type group) {
       break;
 
     case Group_6B:
+
       setBlock(PI_CODE, Block_C_prime);
       break;
 
@@ -223,6 +276,7 @@ int RDSClass::sendGroup(Group_type group) {
       break;
 
     case Group_7B:
+
       setBlock(PI_CODE, Block_C_prime);
       break;
 
@@ -243,6 +297,7 @@ int RDSClass::sendGroup(Group_type group) {
       break;
 
     case Group_10A:
+
       setBlock((((word)group) << 11) | (((word)TP) << 10) | (((word)PTY) << 5) | (((word)PTYN_FLAG) << 4) | (word)(ptyn_i / 4), Block_B);
       setBlock((((word) * (PTYN_NAME + ptyn_i++)) << 8) | *(PTYN_NAME + ptyn_i++), Block_C);
       setBlock((((word) * (PTYN_NAME + ptyn_i++)) << 8) | *(PTYN_NAME + ptyn_i++), Block_D);
@@ -288,6 +343,7 @@ int RDSClass::sendGroup(Group_type group) {
       break;
 
     case Group_15A:
+
       setBlock((((word)group) << 11) | (((word)TP) << 10) | (((word)PTY) << 5) | (((word)TA) << 4) | (word)(di_ps_i / 4), Block_B);
       setBlock((((word) * (PS_Pointer + di_ps_i++)) << 8) | *(PS_Pointer + di_ps_i++), Block_C);
       setBlock((((word) * (PS_Pointer + di_ps_i++)) << 8) | *(PS_Pointer + di_ps_i++), Block_D);
@@ -298,6 +354,7 @@ int RDSClass::sendGroup(Group_type group) {
       break;
 
     case Group_15B:
+
       setBlock((((word)group) << 11) | (((word)TP) << 10) | ((word)PTY << 5) | (((word)RT_A_B_FLAG) << 4) | (rt_i / 4), Block_B);
       setBlock(PI_CODE, Block_C_prime);
       setBlock((((word)group) << 11) | (((word)TP) << 10) | ((word)PTY << 5) | (((word)RT_A_B_FLAG) << 4) | (rt_i / 4), Block_D);
@@ -332,6 +389,7 @@ void RDSClass::setBlock(word message, offset_type offset)
       break;
   }
   RDS_Data_Block_word[MEM_select][BytePointer] = (message << 10) | (crc(message) ^ (word)offset);
+  
 }
 
 /*  ---CRC---*/
@@ -340,18 +398,19 @@ word RDSClass::crc(word message)
   word crc = 0;
   int message_bit;
   int crc_bit;
-  for (int i = 0; i < 16; i++) //we are finished when all bits of the message are looked at
+  for (int i = 0; i < 16; i++)          //we are finished when all bits of the message are looked at
   {
-    message_bit = (message >> 15) & 1;//bit of message we are working on. 15=block length-1
-    crc_bit = (crc >> 9) & 1;//bit of crc we are working on. 9=poly order-1
+    message_bit = (message >> 15) & 1;  //bit of message we are working on. 15=block length-1
+    crc_bit = (crc >> 9) & 1;           //bit of crc we are working on. 9=poly order-1
 
-    crc <<= 1;//shift to next crc bit (have to do this here before Gate A does its thing)
-    message <<= 1;//shift to next message bit
+    crc <<= 1;           //shift to next crc bit (have to do this here before Gate A does its thing)
+    message <<= 1;       //shift to next message bit
 
-    if (crc_bit ^ message_bit)crc = crc ^ 0x1B9; //add to the crc the poly mod2 if crc_bit + block_bit = 1 mod2
+    if (crc_bit ^ message_bit)crc = crc ^ 0x1B9;  //add to the crc the poly mod2 if crc_bit + block_bit = 1 mod2
 
   }
-  return (crc & 0x03FF); //ditch things above 10bits
+  return (crc & 0x03FF);       //ditch things above 10bits
+  
 }
 
 
@@ -359,19 +418,19 @@ word RDSClass::crc(word message)
 void RDSClass::SineTable_UP(int new_rds_phase, int new_rds_level) {
   const double pi = 3.141592653589793238462643383279502884197169399375105820974944;
   int iii = NORMAL_PHASE_0;
-  int sample_57k = 10;  //10
-  static int old_rds_phase = 0; //0
+  int sample_57k = 10;  
+  static int old_rds_phase = 0; 
   static int old_rds_level = 0;
 
   if ((old_rds_phase != new_rds_phase) && (old_rds_level != new_rds_level)) {
-    for (int i = 0; i < 72; i++) {    //72
+    for (int i = 0; i < 72; i++) {    
       for (int ii = 0; ii < sample_57k; ii++) {
         SignalTable_57khz[iii++] = 2047 + sin((pi / 24) * i) * (sin((pi / (sample_57k / 2)) * ii) * (8 * new_rds_level));
       }
     }
 
     iii = NORMAL_PHASE_1;
-    for (int i = 0; i < 96; i++) {     //96
+    for (int i = 0; i < 96; i++) {     
       for (int ii = 0; ii < sample_57k; ii++) {
         SignalTable_57khz[iii++] = 2047 + ((sin((pi / 48) * i) * 2.5) + sin((pi / 16) * i)) * (sin((pi / (sample_57k / 2)) * ii) * (3 * new_rds_level));
       }
@@ -379,7 +438,7 @@ void RDSClass::SineTable_UP(int new_rds_phase, int new_rds_level) {
   }
   old_rds_phase = new_rds_phase;
   old_rds_level = new_rds_level;
-  //Serial.println(new_rds_phase);
+
 }
 
 RDSClass RDS;
@@ -412,19 +471,18 @@ void RDSClass::DACC_ISR_ISR(void)
     sync_c_1++;
   }
   if (sync_c_2 & (1 << 10)) {     //10
-    if ((sync_c_1 > 360) && (sync_c_1 < 397))    //355 392 INT _  EXT19KHZ =375-377
+    if ((sync_c_1 > 340) && (sync_c_1 < 380))    // 340-344  360-397-  355 392 INT19KHZ _  RVR EXT19KHZ READ = 373-377 OMNIA=373 375
       sync_OK = true;
-     //Serial.println("T");
-      
+        
     else sync_OK = false;
-    //Serial.println(sync_c_1);
+    //Serial.println(sync_c_1);   //=341 343 With internal 19KHZ print READ sync_c_1 and copy value to adjust pll
     sync_c_1 = 0;
     sync_c_2 = 0;   
   }
   else {
     sync_c_2++;
   }
-  //---<<<---PILOT SYINC---
+  //---<<<---PILOT SYNC---
 
   bitcounter += 30;
   if (bitcounter >= 480) {      //480
@@ -432,9 +490,9 @@ void RDSClass::DACC_ISR_ISR(void)
 
     if (RDS_Data_Block_word[MEM_select][BlockNumber] & RDS_Data_Block_bit_mask) {
       PhaseShistBit = !PhaseShistBit;
-      DataBit = true;                 //true
+      DataBit = true;                 
     }
-    else DataBit = false;             //false
+    else DataBit = false;             
     if (PhaseShistBit) {
       if (DataBit) PHASE_VAR = NORMAL_PHASE_1;
       else PHASE_VAR = INVERT_PHASE_0;
